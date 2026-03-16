@@ -30,7 +30,7 @@ export default {
 			console.log('定时任务执行成功');
 		} catch (error) {
 			console.error('定时任务执行失败:', error);
-			签到结果 = `定时任务执行失败: ${error.message}`;
+			签到结果 = `定时任务执行失败：${error.message}`;
 			await sendMessage(签到结果);
 		}
 	},
@@ -43,17 +43,17 @@ async function initializeVariables(env) {
 	if (!domain.includes("//")) domain = `https://${domain}`;
 	BotToken = env.TGTOKEN || BotToken;
 	ChatID = env.TGID || ChatID;
-	签到结果 = `地址: ${domain.substring(0, 9)}****${domain.substring(domain.length - 5)}\n账号: ${user.substring(0, 1)}****${user.substring(user.length - 5)}\n密码: ${pass.substring(0, 1)}****${pass.substring(pass.length - 1)}\n\nTG推送: ${ChatID ? `${ChatID.substring(0, 1)}****${ChatID.substring(ChatID.length - 3)}` : "未启用"}`;
+	签到结果 = `地址：${domain.substring(0, 9)}****${domain.substring(domain.length - 5)}\n账号：${user.substring(0, 1)}****${user.substring(user.length - 5)}\n密码：${pass.substring(0, 1)}****${pass.substring(pass.length - 1)}\n\nTG 推送：${ChatID ? `${ChatID.substring(0, 1)}****${ChatID.substring(ChatID.length - 3)}` : "未启用"}`;
 }
 
 async function sendMessage(msg = "") {
-	const 账号信息 = `地址: ${domain}\n账号: ${user}\n密码: <tg-spoiler>${pass}</tg-spoiler>`;
+	const 账号信息 = `地址：${domain}\n账号：${user}\n密码：<tg-spoiler>${pass}</tg-spoiler>`;
 	const now = new Date();
 	const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
 	const formattedTime = beijingTime.toISOString().slice(0, 19).replace('T', ' ');
 	console.log(msg);
 	if (BotToken !== '' && ChatID !== '') {
-		const url = `https://api.telegram.org/bot${BotToken}/sendMessage?chat_id=${ChatID}&parse_mode=HTML&text=${encodeURIComponent("执行时间: " + formattedTime + "\n" + 账号信息 + "\n\n" + msg)}`;
+		const url = `https://api.telegram.org/bot${BotToken}/sendMessage?chat_id=${ChatID}&parse_mode=HTML&text=${encodeURIComponent("执行时间：" + formattedTime + "\n" + 账号信息 + "\n\n" + msg)}`;
 		return fetch(url, {
 			method: 'get',
 			headers: {
@@ -63,7 +63,7 @@ async function sendMessage(msg = "") {
 			}
 		});
 	} else if (ChatID !== "") {
-		const url = `https://api.tg.090227.xyz/sendMessage?chat_id=${ChatID}&parse_mode=HTML&text=${encodeURIComponent("执行时间: " + formattedTime + "\n" + 账号信息 + "\n\n" + msg)}`;
+		const url = `https://api.tg.090227.xyz/sendMessage?chat_id=${ChatID}&parse_mode=HTML&text=${encodeURIComponent("执行时间：" + formattedTime + "\n" + 账号信息 + "\n\n" + msg)}`;
 		return fetch(url, {
 			method: 'get',
 			headers: {
@@ -135,30 +135,35 @@ async function doCheckin() {
 	console.log('登录响应数据:', loginJson);
 
 	if (loginJson.ret !== 1) {
-		throw new Error(`登录失败: ${loginJson.msg || '未知错误'}`);
+		throw new Error(`登录失败：${loginJson.msg || '未知错误'}`);
 	}
 
-	// 获取 Cookie
+	// 修复：改进 Cookie 提取逻辑
 	let cookies = "";
-	if (loginResponse.headers.getSetCookie) {
-		const setCookies = loginResponse.headers.getSetCookie();
-		if (!setCookies || setCookies.length === 0) {
-			throw new Error('登录成功但未收到Cookie (getSetCookie 返回空)');
+	const setCookieHeader = loginResponse.headers.get('set-cookie');
+	
+	if (setCookieHeader) {
+		// 按逗号分割但保留 cookie 完整性（排除 expires 中的逗号）
+		const cookiePairs = [];
+		const parts = setCookieHeader.split(', ');
+		
+		for (let part of parts) {
+			// 取每个 cookie 的 name=value 部分（分号前）
+			const cookiePair = part.split(';')[0].trim();
+			if (cookiePair && cookiePair.includes('=')) {
+				cookiePairs.push(cookiePair);
+			}
 		}
-		console.log('收到的原始 Cookie 数组:', setCookies);
-		cookies = setCookies.map(cookie => cookie.split(';')[0]).join('; ');
-	} else {
-		// 降级兼容：防止直接用逗号切分导致 expires 字段被截断
-		const cookieHeader = loginResponse.headers.get('set-cookie');
-		if (!cookieHeader) {
-			throw new Error('登录成功但未收到Cookie (set-cookie 头为空)');
-		}
-		console.log('收到的原始 Cookie 字符串:', cookieHeader);
-		cookies = cookieHeader.split(/,(?=\s*[a-zA-Z0-9_-]+\s*=)/).map(cookie => cookie.split(';')[0]).join('; ');
+		cookies = cookiePairs.join('; ');
+		console.log('提取的 Cookie:', cookies);
+	}
+	
+	if (!cookies) {
+		throw new Error('登录成功但未收到有效 Cookie');
 	}
 
-	// 等待确保登录状态
-	await new Promise(resolve => setTimeout(resolve, 1000));
+	// 增加等待时间确保登录状态生效
+	await new Promise(resolve => setTimeout(resolve, 2000));
 
 	// 签到请求
 	const checkinResponse = await fetch(`${domain}/user/checkin`, {
@@ -189,9 +194,9 @@ async function doCheckin() {
 			签到结果 = `🎉 签到结果 🎉\n ${checkinResult.msg || '签到结果未知'}`;
 		}
 	} catch (e) {
-		if (responseText.includes('登录') || responseText.includes('<html')) {
-			throw new Error('登录状态无效或Cookie未生效，返回了页面HTML');
+		if (responseText.includes('登录') || responseText.includes('<html') || responseText.includes('window.location')) {
+			throw new Error('登录状态无效或 Cookie 未生效，返回了页面 HTML');
 		}
-		throw new Error(`解析签到响应 JSON 失败: ${e.message}\n\n原始响应: ${responseText}`);
+		throw new Error(`解析签到响应 JSON 失败：${e.message}\n\n原始响应：${responseText}`);
 	}
 }
